@@ -1,0 +1,10 @@
+{
+  "name": "Auxiliar de Compras",
+  "short_name": "Compras",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#b40016",
+  "lang": "pt-BR",
+  "description": "Auxiliar de compras para comparar preços e organizar reposição."
+}
