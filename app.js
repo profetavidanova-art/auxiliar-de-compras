@@ -1,80 +1,28 @@
-const KEY='auxiliarComprasV1';
-const defaultState={products:[],prices:[],purchases:[]};
-let state=load();
-
-function load(){try{return JSON.parse(localStorage.getItem(KEY))||defaultState}catch(e){return defaultState}}
-function save(){localStorage.setItem(KEY,JSON.stringify(state)); renderAll()}
+const KEY='auxiliarComprasV2'; const oldKey='auxiliarComprasV1';
+const defaultState={products:[],prices:[],purchases:[]}; let state=load(); let photoData='';
+function load(){try{const v=JSON.parse(localStorage.getItem(KEY));if(v)return v;const old=JSON.parse(localStorage.getItem(oldKey));return old||structuredClone(defaultState)}catch(e){return structuredClone(defaultState)}}
+function save(){localStorage.setItem(KEY,JSON.stringify(state));renderAll()}
 function money(v){return Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})}
-function esc(s){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
-
-document.querySelectorAll('.tab').forEach(btn=>btn.addEventListener('click',()=>{
- document.querySelectorAll('.tab').forEach(b=>b.classList.remove('active'));
- document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
- btn.classList.add('active'); document.getElementById(btn.dataset.tab).classList.add('active');
- renderAll();
-}));
-
-document.getElementById('productForm').addEventListener('submit',e=>{
- e.preventDefault();
- const name=document.getElementById('productName').value.trim();
- const qty=Math.max(1,Number(document.getElementById('productQty').value)||1);
- if(name){state.products.push({id:crypto.randomUUID(),name,qty});save();e.target.reset();document.getElementById('productQty').value=1}
-});
-document.getElementById('priceForm').addEventListener('submit',e=>{
- e.preventDefault();
- const product=document.getElementById('priceProduct').value.trim();
- const store=document.getElementById('storeName').value.trim();
- const value=Number(document.getElementById('priceValue').value);
- if(product&&store&&Number.isFinite(value)&&value>=0){state.prices.push({id:crypto.randomUUID(),product,store,value,date:new Date().toISOString()});save();e.target.reset()}
-});
-document.getElementById('clearList').addEventListener('click',()=>{state.products=[];save()});
-document.getElementById('finishPurchase').addEventListener('click',()=>{
- const rows=getBest();
- if(!rows.length){alert('Adicione produtos à lista e cadastre preços primeiro.');return}
- const total=rows.reduce((s,r)=>s+r.total,0);
- state.purchases.unshift({date:new Date().toISOString(),total,items:rows.length});
- state.products=[]; save(); alert('Compra registrada com sucesso.'); 
-});
-
-function getBest(){
- return state.products.map(p=>{
-   const matches=state.prices.filter(x=>x.product.toLowerCase()===p.name.toLowerCase());
-   if(!matches.length)return {...p,best:null,total:0};
-   const best=matches.reduce((a,b)=>a.value<=b.value?a:b);
-   return {...p,best,total:best.value*p.qty};
- });
-}
-function renderList(){
- const el=document.getElementById('listItems');
- el.innerHTML=state.products.length?state.products.map(p=>`<div class="item"><div><strong>${esc(p.name)}</strong><span class="muted">Quantidade: ${p.qty}</span></div><button class="secondary" onclick="removeProduct('${p.id}')">Remover</button></div>`).join(''):'<div class="empty">Sua lista de faltas está vazia.</div>';
-}
-function renderPrices(){
- const el=document.getElementById('priceItems');
- el.innerHTML=state.prices.length?[...state.prices].reverse().map(p=>`<div class="item"><div><strong>${esc(p.product)}</strong><span class="muted">${esc(p.store)}</span></div><div><span class="price">${money(p.value)}</span> <button class="secondary" onclick="removePrice('${p.id}')">Excluir</button></div></div>`).join(''):'<div class="empty">Nenhum preço cadastrado.</div>';
-}
-function renderPurchase(){
- const rows=getBest(), el=document.getElementById('smartPurchase');
- if(!rows.length){el.innerHTML='<div class="empty">Adicione produtos à lista.</div>';document.getElementById('purchaseTotal').textContent='';return}
- const missing=rows.filter(r=>!r.best);
- const grouped={};
- rows.filter(r=>r.best).forEach(r=>(grouped[r.best.store]??=[]).push(r));
- let html='';
- Object.entries(grouped).forEach(([store,items])=>{
-  html+=`<div class="store-group"><h3>🏪 ${esc(store)}</h3>`;
-  html+=items.map(r=>`<div class="item best"><div><strong>${esc(r.name)}</strong><span class="muted">${r.qty} × ${money(r.best.value)}</span></div><span class="price">${money(r.total)}</span></div>`).join('');
-  html+='</div>';
- });
- if(missing.length)html+=`<div class="empty">⚠️ Sem preço cadastrado: ${missing.map(r=>esc(r.name)).join(', ')}</div>`;
- el.innerHTML=html;
- const total=rows.reduce((s,r)=>s+r.total,0);
- document.getElementById('purchaseTotal').textContent=`Total estimado: ${money(total)}`;
-}
-function renderHistory(){
- const total=state.purchases.reduce((s,p)=>s+p.total,0);
- document.getElementById('summary').innerHTML=`<div class="item"><div><strong>Total registrado</strong><span class="muted">${state.purchases.length} compra(s)</span></div><span class="price">${money(total)}</span></div>`;
- document.getElementById('historyItems').innerHTML=state.purchases.length?state.purchases.map(p=>`<div class="item"><div><strong>${new Date(p.date).toLocaleDateString('pt-BR')}</strong><span class="muted">${p.items} itens</span></div><span class="price">${money(p.total)}</span></div>`).join(''):'<div class="empty">Nenhuma compra registrada ainda.</div>';
-}
-function renderAll(){renderList();renderPrices();renderPurchase();renderHistory()}
-window.removeProduct=id=>{state.products=state.products.filter(x=>x.id!==id);save()};
-window.removePrice=id=>{state.prices=state.prices.filter(x=>x.id!==id);save()};
-renderAll();
+function esc(s){return String(s??'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]))}
+function valid(p){return !p.expiry || p.expiry>=new Date().toISOString().slice(0,10)}
+function days(exp){if(!exp)return '';const n=Math.ceil((new Date(exp+'T23:59:59')-new Date())/86400000);return n<0?'Vencida':n===0?'Vence hoje':`Válida por ${n} dia(s)`}
+document.querySelectorAll('.tab').forEach(btn=>btn.onclick=()=>{document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));btn.classList.add('active');document.getElementById(btn.dataset.tab).classList.add('active');renderAll()});
+document.getElementById('productForm').onsubmit=e=>{e.preventDefault();const name=productName.value.trim(),qty=Math.max(1,+productQty.value||1);if(name){state.products.push({id:crypto.randomUUID(),name,qty});save();e.target.reset();productQty.value=1}};
+document.getElementById('priceForm').onsubmit=e=>{e.preventDefault();addPrice(priceProduct.value,storeName.value,priceValue.value,priceExpiry.value,false);e.target.reset()};
+document.getElementById('offerForm').onsubmit=e=>{e.preventDefault();addPrice(offerProduct.value,offerStore.value,offerPrice.value,offerExpiry.value,true);e.target.reset();preview.hidden=true;photoData='';readPhoto.disabled=true;ocrStatus.textContent=''};
+function addPrice(product,store,value,expiry,fromPhoto){product=product.trim();store=store.trim();value=Number(value);if(product&&store&&Number.isFinite(value)){state.prices.push({id:crypto.randomUUID(),product,store,value,expiry:expiry||'',date:new Date().toISOString(),fromPhoto});save()}}
+clearList.onclick=()=>{state.products=[];save()}; clearExpired.onclick=()=>{state.prices=state.prices.filter(valid);save()};
+finishPurchase.onclick=()=>{const rows=getBest();if(!rows.length){alert('Adicione produtos e preços primeiro.');return}const total=rows.reduce((s,r)=>s+r.total,0);state.purchases.unshift({date:new Date().toISOString(),total,items:rows.filter(r=>r.best).length});state.products=[];save();alert('Compra registrada.')};
+offerPhoto.onchange=async e=>{const f=e.target.files[0];if(!f)return;photoData=await resize(f);preview.src=photoData;preview.hidden=false;readPhoto.disabled=false;ocrStatus.textContent='Foto pronta para leitura.'};
+function resize(file){return new Promise(res=>{const im=new Image();im.onload=()=>{const max=1400,s=Math.min(1,max/Math.max(im.width,im.height)),c=document.createElement('canvas');c.width=im.width*s;c.height=im.height*s;c.getContext('2d').drawImage(im,0,0,c.width,c.height);res(c.toDataURL('image/jpeg',.82))};im.src=URL.createObjectURL(file)})}
+readPhoto.onclick=async()=>{if(!photoData)return;if(!window.Tesseract){ocrStatus.textContent='Não foi possível carregar o leitor. Verifique a internet.';return}readPhoto.disabled=true;ocrStatus.textContent='Lendo a foto… isso pode levar alguns segundos.';try{const r=await Tesseract.recognize(photoData,'por',{logger:m=>{if(m.status==='recognizing text')ocrStatus.textContent=`Lendo… ${Math.round((m.progress||0)*100)}%`}});parseOCR(r.data.text);ocrStatus.textContent='Leitura concluída. Confira os campos antes de salvar.'}catch(err){ocrStatus.textContent='Não consegui ler essa foto. Você pode preencher os campos manualmente.'}finally{readPhoto.disabled=false}};
+function parseOCR(text){const lines=text.split(/\n/).map(x=>x.trim()).filter(Boolean);const priceMatches=[...text.matchAll(/(?:R\$\s*)?(\d{1,4})[,.](\d{2})/g)].map(m=>({raw:m[0],v:+(m[1]+'.'+m[2])})).filter(x=>x.v>0&&x.v<10000);if(priceMatches.length)offerPrice.value=Math.min(...priceMatches.map(x=>x.v)).toFixed(2);const date=text.match(/(?:até|validade|válid[oa]\s*até)?\s*(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?/i);if(date){let y=date[3]?+date[3]:new Date().getFullYear();if(y<100)y+=2000;offerExpiry.value=`${y}-${String(date[2]).padStart(2,'0')}-${String(date[1]).padStart(2,'0')}`}
+const storeWords=/mercado|supermercado|atacad|assai|assaí|guanabara|mundial|carrefour|extra|prezunic|rede economia|supermarket/i;const store=lines.find(x=>storeWords.test(x));if(store)offerStore.value=store.slice(0,60);const product=lines.find(x=>x.length>3&&!storeWords.test(x)&&!/[R$]|\d+[,.]\d{2}/.test(x));if(product)offerProduct.value=product.slice(0,80)}
+function getBest(){return state.products.map(p=>{const matches=state.prices.filter(x=>valid(x)&&x.product.toLowerCase()===p.name.toLowerCase());if(!matches.length)return {...p,best:null,total:0};const best=matches.reduce((a,b)=>a.value<=b.value?a:b);return {...p,best,total:best.value*p.qty}})}
+function renderList(){listItems.innerHTML=state.products.length?state.products.map(p=>`<div class="item"><div><strong>${esc(p.name)}</strong><span class="muted">Quantidade: ${p.qty}</span></div><button class="secondary" onclick="removeProduct('${p.id}')">Remover</button></div>`).join(''):'<div class="empty">Sua lista está vazia.</div>'}
+function renderOffers(){const arr=state.prices.filter(x=>x.fromPhoto&&valid(x)).sort((a,b)=>a.value-b.value);offerItems.innerHTML=arr.length?arr.map(p=>priceCard(p)).join(''):'<div class="empty">Nenhuma oferta válida cadastrada.</div>'}
+function priceCard(p){return `<div class="item ${valid(p)?'best':'expired'}"><div><strong>${esc(p.product)}</strong><span class="muted">${esc(p.store)} · ${p.expiry?esc(days(p.expiry)):'Sem validade'}</span></div><div><span class="price">${money(p.value)}</span> <button class="secondary" onclick="removePrice('${p.id}')">Excluir</button></div></div>`}
+function renderPrices(){const groups={};state.prices.forEach(p=>(groups[p.product.toLowerCase()]??=[]).push(p));const html=Object.values(groups).map(g=>{g.sort((a,b)=>(valid(b)-valid(a))||a.value-b.value);const best=g.find(valid);return `<div class="compare"><h3>${esc(g[0].product)} ${best?`<span class="pill">Menor válido: ${money(best.value)} · ${esc(best.store)}</span>`:''}</h3>${g.map(priceCard).join('')}</div>`}).join('');priceItems.innerHTML=html||'<div class="empty">Nenhum preço cadastrado.</div>'}
+function renderPurchase(){const rows=getBest();if(!rows.length){smartPurchase.innerHTML='<div class="empty">Adicione produtos à lista.</div>';purchaseTotal.textContent='';return}const grouped={};rows.filter(r=>r.best).forEach(r=>(grouped[r.best.store]??=[]).push(r));let html='';Object.entries(grouped).forEach(([store,items])=>{html+=`<div class="store-group"><h3>🏪 ${esc(store)}</h3>${items.map(r=>`<div class="item best"><div><strong>${esc(r.name)}</strong><span class="muted">${r.qty} × ${money(r.best.value)}${r.best.expiry?' · até '+new Date(r.best.expiry+'T12:00').toLocaleDateString('pt-BR'):''}</span></div><span class="price">${money(r.total)}</span></div>`).join('')}</div>`});const missing=rows.filter(r=>!r.best);if(missing.length)html+=`<div class="empty">⚠️ Sem preço válido: ${missing.map(r=>esc(r.name)).join(', ')}</div>`;smartPurchase.innerHTML=html;purchaseTotal.textContent=`Total estimado: ${money(rows.reduce((s,r)=>s+r.total,0))}`}
+function renderHistory(){const total=state.purchases.reduce((s,p)=>s+p.total,0);summary.innerHTML=`<div class="item"><div><strong>Total registrado</strong><span class="muted">${state.purchases.length} compra(s)</span></div><span class="price">${money(total)}</span></div>`;historyItems.innerHTML=state.purchases.length?state.purchases.map(p=>`<div class="item"><div><strong>${new Date(p.date).toLocaleDateString('pt-BR')}</strong><span class="muted">${p.items} itens</span></div><span class="price">${money(p.total)}</span></div>`).join(''):'<div class="empty">Nenhuma compra registrada.</div>'}
+function renderAll(){renderOffers();renderList();renderPrices();renderPurchase();renderHistory()}window.removeProduct=id=>{state.products=state.products.filter(x=>x.id!==id);save()};window.removePrice=id=>{state.prices=state.prices.filter(x=>x.id!==id);save()};renderAll();
